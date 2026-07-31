@@ -42,6 +42,27 @@ genome_assembly_ONT(hi-c)              pangenome_graph_pipeline
                           다 들어있음
 ```
 
+## 연구 배경 (관련 국내 연구 동향)
+
+2026년 국내 long-read sequencing 학회에서도 이 방향(long-read assembly
+→ 판게놈 → 희귀질환/구조변이 재발굴)이 여러 그룹에서 공통적으로
+확인되었습니다:
+
+- **GIST 박지환 교수님**은 발표에서 "이제 ONT를 이용해 이전에
+  reference genome에만 의존하던 분석을 판게놈을 통해 population
+  genetics 관점에서 진행할 수 있다"고 하시면서, Choi Lab이 보유한
+  long-read 데이터로 판게놈을 만들고 이때 assembly 단계가 필요하다는
+  점을 직접 언급하셨습니다. `genome_assembly_ONT(hi-c)`가 바로 그
+  assembly 단계, 이 저장소가 그 다음의 판게놈 구축 단계에 해당합니다.
+- **서울대병원 문장섭 교수님**은 short-read 기반 도구(Expansion
+  Hunter 등)로는 놓쳤던 tandem repeat disorder 65종을 ONT
+  long-read로 재검출한 사례를 발표하셨습니다 — 이 저장소가 만드는
+  판게놈 그래프로 short-read 샘플을 재분석했을 때 기대하는 효과와
+  같은 방향입니다.
+- **연세대 윤지훈 교수님**은 한국인 56명의 genome을 ONT로 assembly해
+  reference-free 방식(예: `asm2d6`)으로 임상적으로 중요한 유전자좌를
+  분석한 사례를 보여주셨습니다.
+
 ## 핵심 개념 (용어가 낯설다면 먼저 읽어주세요)
 
 - **그래프(Graph)**: 판게놈을 표현하는 자료구조. 서열 조각을 "노드",
