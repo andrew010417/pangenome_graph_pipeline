@@ -2,32 +2,51 @@
 
 문의사항은 Jaehyung Park(JP)에게 문의해주세요.
 
-## 한 줄 요약
+## 요약
 
-여러 사람의 개인별 genome assembly를 하나의 **판게놈 그래프**로 합치고,
-그 그래프를 기준으로 새로운 short-read 샘플의 **변이를 찾아내는**
-파이프라인입니다.
+Oxford Nanopore(ONT)로 대표되는 long-read 시퀀싱은 가격과 정확도가
+빠르게 개선되면서 희귀질환 진단·인구집단 유전체 연구의 핵심 기술로
+자리잡아가고 있습니다. 기존 short-read 기반 분석(Illumina, Q>40 수준의
+높은 base-level 정확도)은 read 길이가 150bp 안팎으로 짧다는 근본적인
+한계 때문에 다음을 구조적으로 놓칩니다:
 
-## 왜 필요한가
+- **구조변이(SV)** — 수백~수천 bp 크기의 삽입/결실은 짧은 read로 통째로
+  걸쳐 읽을 수 없어 간접적인 신호로만 추정 가능
+- **Tandem repeat 확장(expansion) 질환** — 반복서열이 길어지는 질환은
+  Expansion Hunter 같은 short-read 전용 도구로도 상당수 놓침
+- **Transcript isoform** — short-read RNA-seq은 조각 단위(300~400nt)로만
+  읽어서 전체 isoform 구조를 재구성하기 어려움
+- **RNA 화학적 변형(modification)** — 170종 이상 존재하는 RNA
+  modification은 기존 antibody pulldown/bisulfite 방식으로는 검출
+  범위와 비용에 한계가 있었음 (최근 ONT single-molecule 시퀀싱 +
+  딥러닝 기반 modification 검출 모델로 이 한계가 풀리고 있음)
+- **레퍼런스에 없는 서열** — 단일 레퍼런스 게놈(GRCh38) 하나와만
+  비교하는 방식이라, 레퍼런스에 존재하지 않는 서열은 애초에 비교
+  대상이 없어 변이로 인식되지 않음 (reference bias)
 
-기존의 변이 발굴 방식은 **한 명의 레퍼런스 게놈(예: GRCh38)** 하고만
-비교합니다. 이 방식은 그 레퍼런스 한 명과 다른 부분만 "변이"로
-잡아내기 때문에, 레퍼런스에는 없는 희귀하거나 구조적으로 복잡한
-변이는 애초에 비교 대상이 없어서 놓치기 쉽습니다.
+ONT long-read(HiFi 포함)는 read 하나가 길어서 이런 영역을 통째로 읽고
+조립(assembly)할 수 있고, telomere 길이 측정, T2T 수준 assembly,
+single-cell 수준 long-read 시퀀싱, 추가 라이브러리 준비 없이 특정
+영역만 골라 읽는 adaptive sampling 등으로 활용 범위가 계속
+넓어지고 있습니다. 이런 흐름에서, 개별 long-read assembly들을 모아
+**판게놈(pangenome) 그래프**로 합치는 것은 단일 레퍼런스 기반 분석의
+자연스러운 다음 단계로 여겨집니다 — 한 명이 아니라 여러 명(수십~수백
+명)의 게놈을 하나의 그래프 자료구조에 담아두면, 그래프 안에서 여러
+사람이 공유하는 서열은 하나의 경로로 겹치고 사람마다 다른 부분은
+그래프가 갈라지는(분기하는) 형태로 표현됩니다. 그렇게 만든 그래프에
+새로운 사람의 DNA를 대조하면, 단일 레퍼런스로는 안 보이던 변이(이미
+그래프 안의 누군가는 갖고 있던 변이)까지 훨씬 잘 잡아낼 수 있습니다 —
+특히 **환자를 다시 long-read로 재시퀀싱할 필요 없이, 기존 short-read
+데이터를 이 풍부해진 그래프에 대조하는 것만으로도** 예전에는 놓쳤던
+변이를 재발굴할 수 있다는 점이 핵심입니다.
 
-**판게놈 그래프**는 한 명이 아니라 여러 명(수십~수백 명)의 게놈을 한꺼번에
-하나의 그래프 자료구조로 합쳐놓은 것입니다. 그래프 안에는 여러 사람이
-공유하는 서열은 하나의 경로로 겹쳐 있고, 사람마다 다른 부분은 그래프가
-갈라지는(분기하는) 형태로 표현됩니다. 새로운 사람의 DNA를 이 그래프에
-대조하면, 단일 레퍼런스로는 안 보이던 변이(이미 그래프 안의 누군가는
-갖고 있던 변이)까지 훨씬 잘 잡아낼 수 있습니다.
-
-이 저장소는 개인별 long-read assembly 파이프라인인
-[`genome_assembly_ONT(hi-c)`](../genome_assembly_ONT(hi-c))의 다음
-단계입니다: 그 파이프라인이 사람 한 명 한 명의 assembly(유전체 지도)를
-만들면, 이 저장소는 그 assembly들 + 레퍼런스 게놈을 합쳐서 판게놈
-그래프를 만들고, 그 그래프로 다른 short-read 샘플(예: 희귀질환
-환자)의 변이를 찾는 데 씁니다.
+이 저장소는 그 흐름의 후반부, 즉 **판게놈 그래프 구축과 genotyping**
+단계를 구현합니다. 개인별 long-read assembly 파이프라인인
+[`genome_assembly_ONT(hi-c)`](../genome_assembly_ONT(hi-c))가 사람 한
+명 한 명의 assembly(유전체 지도)를 만들면, 이 저장소는 그
+assembly들 + 레퍼런스 게놈을 Minigraph-Cactus/PGGB로 합쳐서 판게놈
+그래프를 만들고, vg와 PanGenie로 새로운 short-read 샘플(예: 희귀질환
+환자)의 변이를 찾아냅니다.
 
 ```
 genome_assembly_ONT(hi-c)              pangenome_graph_pipeline
@@ -41,27 +60,6 @@ genome_assembly_ONT(hi-c)              pangenome_graph_pipeline
   grch38.fa (레퍼런스)─┘   여러 사람의 정보가
                           다 들어있음
 ```
-
-## 연구 배경 (관련 국내 연구 동향)
-
-2026년 국내 long-read sequencing 학회에서도 이 방향(long-read assembly
-→ 판게놈 → 희귀질환/구조변이 재발굴)이 여러 그룹에서 공통적으로
-확인되었습니다:
-
-- **GIST 박지환 교수님**은 발표에서 "이제 ONT를 이용해 이전에
-  reference genome에만 의존하던 분석을 판게놈을 통해 population
-  genetics 관점에서 진행할 수 있다"고 하시면서, Choi Lab이 보유한
-  long-read 데이터로 판게놈을 만들고 이때 assembly 단계가 필요하다는
-  점을 직접 언급하셨습니다. `genome_assembly_ONT(hi-c)`가 바로 그
-  assembly 단계, 이 저장소가 그 다음의 판게놈 구축 단계에 해당합니다.
-- **서울대병원 문장섭 교수님**은 short-read 기반 도구(Expansion
-  Hunter 등)로는 놓쳤던 tandem repeat disorder 65종을 ONT
-  long-read로 재검출한 사례를 발표하셨습니다 — 이 저장소가 만드는
-  판게놈 그래프로 short-read 샘플을 재분석했을 때 기대하는 효과와
-  같은 방향입니다.
-- **연세대 윤지훈 교수님**은 한국인 56명의 genome을 ONT로 assembly해
-  reference-free 방식(예: `asm2d6`)으로 임상적으로 중요한 유전자좌를
-  분석한 사례를 보여주셨습니다.
 
 ## 핵심 개념 (용어가 낯설다면 먼저 읽어주세요)
 
