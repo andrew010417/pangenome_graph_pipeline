@@ -1,91 +1,91 @@
-# Pangenome Graph Construction & Genotyping Pipeline
+# 판게놈 그래프 구축 및 Genotyping 파이프라인
 
 문의사항은 Jaehyung Park(JP)에게 문의해주세요.
 
-Builds a pangenome graph from multiple per-sample genome assemblies
-(e.g. the output of [`genome_assembly_ONT(hi-c)`](../genome_assembly_ONT(hi-c)))
-plus reference genome(s), using **Minigraph-Cactus** and/or **PGGB**,
-then genotypes/calls variants for individual short-read samples against
-that graph using **vg** (direct read-to-graph mapping) and/or
-**PanGenie** (k-mer-based panel genotyping).
+여러 사람의 개인별 genome assembly(예: [`genome_assembly_ONT(hi-c)`](../genome_assembly_ONT(hi-c))의
+결과물)와 레퍼런스 게놈을 **Minigraph-Cactus** 그리고/또는 **PGGB**로 합쳐서
+하나의 판게놈 그래프를 만들고, 그 그래프를 이용해 개별 short-read 샘플의
+변이를 **vg**(read를 그래프에 직접 매핑) 그리고/또는 **PanGenie**(k-mer
+기반 패널 genotyping)로 찾아내는 파이프라인입니다.
 
-Intended as the downstream step after per-sample long-read assembly:
-`genome_assembly_ONT(hi-c)` produces individual assemblies; this repo
-combines them into a graph and uses it to find variants (including rare
-ones a single linear reference would miss) in short-read samples.
+개인별 long-read assembly 다음 단계로 이어지도록 설계했습니다:
+`genome_assembly_ONT(hi-c)`가 개인별 assembly를 만들면, 이 저장소는 그
+assembly들을 하나의 그래프로 합치고, 그 그래프로 short-read 샘플에서
+변이(단일 레퍼런스로는 놓칠 수 있는 희귀 변이 포함)를 찾는 데 씁니다.
 
-## Provenance
+## 배경 (Provenance)
 
-Adapted from pangenome graph construction work done previously at KOGIC
-(국바빅 범유전체 project) comparing Minigraph-Cactus and PGGB on
-CHM13/GRCh38, and their downstream use with `vg` and `PanGenie` for
-variant discovery/genotyping on GIAB HG002 data. That project's own
-benchmarking (see internal planning notes) found Minigraph-Cactus far
-more practical for larger sample counts — faster, much lower peak
-memory, scales further — while PGGB produces a more finely-branched
-graph (more edges, more bubble structure) from its reference-free
-all-vs-all alignment, at the cost of runtime/memory and reliability at
-scale (observed failures at ~100+ haplotypes in that prior benchmark).
+이전에 KOGIC(국바빅 범유전체 프로젝트)에서 진행했던 판게놈 그래프 구축
+작업을 참고해서 만들었습니다. 그 프로젝트에서는 CHM13/GRCh38를 대상으로
+Minigraph-Cactus와 PGGB를 비교하고, `vg`와 `PanGenie`로 GIAB HG002
+데이터에 대한 변이 발굴/genotyping까지 진행한 바 있습니다. 당시 자체
+벤치마크(내부 기획 자료 참고)에 따르면, 샘플 수가 많아질수록
+Minigraph-Cactus가 훨씬 실용적이었습니다 — 더 빠르고, peak 메모리도
+훨씬 낮고, 확장성도 더 좋았습니다. 반면 PGGB는 reference-free
+all-vs-all 정렬 방식이라 더 세밀하게 가지 친(branch) 그래프(엣지가 더
+많고 bubble 구조가 많음)를 만들지만, 그만큼 시간/메모리 비용이 크고
+규모가 커지면 안정성이 떨어졌습니다 (이전 벤치마크에서 haplotype
+100개 이상에서 실패 사례 관찰).
 
-Unlike `genome_assembly_ONT(hi-c)`, the original scripts from that
-project were not available to adapt directly — only summary notes and
-benchmark numbers. **The scripts here are freshly written against each
-tool's documented CLI**, not copies of a previously-running pipeline.
-Treat filenames, exact flags, and version-specific behavior as
-unverified until run end-to-end on a small test dataset — see
-[VERIFICATION_TODO.md](VERIFICATION_TODO.md).
+`genome_assembly_ONT(hi-c)`와 달리, 이 프로젝트의 원본 스크립트는
+확보하지 못했고 요약 노트와 벤치마크 수치만 참고할 수 있었습니다.
+**이 저장소의 스크립트들은 예전에 돌아가던 파이프라인을 그대로 복사한
+것이 아니라, 각 도구의 공식 CLI 문서를 기준으로 새로 작성**한 것입니다.
+파일명, 정확한 플래그, 버전별 동작 방식은 소규모 테스트 데이터로
+end-to-end 실행해서 확인하기 전까지는 검증되지 않은 것으로 간주해주세요
+— [VERIFICATION_TODO.md](VERIFICATION_TODO.md) 참고.
 
-## Requirements
+## 요구 사항
 
-- `cactus` (>= 9.x with `cactus-pangenome`) — **not** conda-installable,
-  see `environment.yml` for install notes
+- `cactus` (`cactus-pangenome` 포함, 9.x 이상) — conda로 설치 **불가**,
+  설치 방법은 `environment.yml` 참고
 - `pggb`, `vg`, `PanGenie`, `bcftools`, `samtools`, `htslib` (tabix/bgzip), `seqkit`
 
-A version-pinned conda environment for everything except Cactus is
-provided in `environment.yml`:
+Cactus를 제외한 나머지 도구들은 버전을 고정한 conda 환경을
+`environment.yml`로 제공합니다:
 
 ```bash
-mamba env create -f environment.yml   # or: conda env create -f environment.yml
+mamba env create -f environment.yml   # 또는: conda env create -f environment.yml
 conda activate pangenome-graph
 ```
 
-Scripts are scheduler-agnostic plain bash (no SGE/SLURM headers). Wrap
-with `qsub`/`sbatch` yourself if your cluster needs it. Thread counts
-(`-t`) default to a conservative value in each script; adjust to your
-server's actual core count.
+스크립트는 스케줄러에 종속되지 않는 순수 bash입니다 (SGE/SLURM 헤더
+없음). 클러스터에서 필요하면 `qsub`/`sbatch`로 직접 감싸서 쓰세요.
+스레드 수(`-t`)는 각 스크립트마다 보수적인 기본값이 들어있으니 실제
+서버 코어 수에 맞게 조정하세요.
 
 실제 랩 서버에서 처음 실행하기 전에 [VERIFICATION_TODO.md](VERIFICATION_TODO.md)의
 검증 항목을 먼저 확인해주세요.
 
-## Pipeline
+## 파이프라인 구성
 
 ```
 scripts/
-├── lib/common.sh                       shared helpers (logging, resource monitor)
-├── 01_prepare_input_fasta.sh           PanSN-spec header renaming + MC seqFile / PGGB merged FASTA
-├── 02a_build_graph_minigraph_cactus.sh cactus-pangenome  -> VCF panel + Giraffe GBZ (recommended default)
-├── 02b_build_graph_pggb.sh             pggb               -> GFA graph (secondary/comparison path)
-├── 03_pggb_gfa_to_vcf.sh               vg convert + vg deconstruct  -> VCF panel (PGGB path only)
-├── 04_vg_autoindex_giraffe.sh          vg autoindex --workflow giraffe -> GBZ/dist/min (PGGB path, or to rebuild MC's)
-├── 05_vg_giraffe_call.sh               vg giraffe -> vg pack -> vg call   (per-sample, direct graph mapping)
-├── 06_prepare_pangenie_panel.sh        bcftools norm -m -any  -> biallelic panel VCF
-└── 07_pangenie_genotype.sh             PanGenie k-mer counting + HMM genotyping  (per-sample, panel-based)
+├── lib/common.sh                       공통 helper (로깅, 리소스 모니터링)
+├── 01_prepare_input_fasta.sh           PanSN 규칙 헤더 정리 + MC seqFile / PGGB 병합 FASTA 생성
+├── 02a_build_graph_minigraph_cactus.sh cactus-pangenome  -> VCF 패널 + Giraffe GBZ (기본 권장 경로)
+├── 02b_build_graph_pggb.sh             pggb               -> GFA 그래프 (보조/비교 경로)
+├── 03_pggb_gfa_to_vcf.sh               vg convert + vg deconstruct  -> VCF 패널 (PGGB 경로 전용)
+├── 04_vg_autoindex_giraffe.sh          vg autoindex --workflow giraffe -> GBZ/dist/min (PGGB 경로, 또는 MC 인덱스 재생성용)
+├── 05_vg_giraffe_call.sh               vg giraffe -> vg pack -> vg call   (샘플별, 그래프 직접 매핑)
+└── 06_prepare_pangenie_panel.sh        bcftools norm -m -any  -> biallelic 패널 VCF
+└── 07_pangenie_genotype.sh             PanGenie k-mer counting + HMM genotyping  (샘플별, 패널 기반)
 ```
 
-**Which graph builder**: use Minigraph-Cactus (`02a`) by default —
-faster, lower memory, handles more samples. Use PGGB (`02b` + `03`) for
-smaller sample sets or loci where its more complete/reference-free
-variation representation is worth the extra cost, or when you want to
-compare both against each other.
+**어떤 그래프 구축 도구를 쓸지**: 기본은 Minigraph-Cactus(`02a`)를
+사용하세요 — 더 빠르고, 메모리도 적게 쓰고, 샘플 수가 많아도 잘
+버팁니다. PGGB(`02b` + `03`)는 샘플 수가 적거나, 더 완전하고
+reference-free한 variation 표현이 추가 비용을 감수할 만큼 중요한
+locus를 볼 때, 또는 두 방법을 서로 비교하고 싶을 때 사용하세요.
 
-**Which variant-calling path**: `vg` (`05`) discovers variants directly
-from how reads map onto the graph — it can find things not already in
-the graph. `PanGenie` (`06` + `07`) instead checks a fixed panel of
-already-known graph variants against a sample's k-mer content — faster,
-but limited to what's in the panel. Running both on the same sample is
-a reasonable way to cross-check calls.
+**어떤 변이 발굴 경로를 쓸지**: `vg`(`05`)는 read가 그래프에 매핑되는
+방식을 그대로 이용해 변이를 직접 발굴합니다 — 그래프에 아직 없는
+변이도 찾을 수 있습니다. `PanGenie`(`06` + `07`)는 대신 이미 알려진
+그래프 변이 목록(패널)을 샘플의 k-mer 정보와 대조해서 확인합니다 —
+더 빠르지만 패널에 있는 것만 찾을 수 있습니다. 같은 샘플에 두 방법을
+모두 돌려서 서로 교차 검증하는 것도 합리적인 방법입니다.
 
-### Minigraph-Cactus path (recommended default)
+### Minigraph-Cactus 경로 (기본 권장)
 
 ```bash
 scripts/01_prepare_input_fasta.sh -o prep -m samples_manifest.tsv -t 8
@@ -106,12 +106,12 @@ scripts/07_pangenie_genotype.sh \
     -q sample01_reads.fastq.gz -r ref/grch38.fa -v panel/panel.biallelic.vcf.gz -t 16
 ```
 
-### PGGB path (secondary / comparison)
+### PGGB 경로 (보조 / 비교용)
 
 ```bash
 scripts/01_prepare_input_fasta.sh -o prep -m samples_manifest.tsv -t 8
 
-scripts/02b_build_graph_pggb.sh -o graph_pggb -i prep/pggb_input.fa.gz -n <num_haplotypes> -t 32
+scripts/02b_build_graph_pggb.sh -o graph_pggb -i prep/pggb_input.fa.gz -n <haplotype 개수> -t 32
 
 scripts/03_pggb_gfa_to_vcf.sh -o graph_pggb -g graph_pggb/smooth.final.gfa -r grch38 -t 16
 
@@ -123,9 +123,9 @@ scripts/05_vg_giraffe_call.sh \
     -1 sample01_R1.fastq.gz -2 sample01_R2.fastq.gz -t 16
 ```
 
-`samples_manifest.tsv` format (see `01_prepare_input_fasta.sh` header
-comment): `sample_id<TAB>hap_index<TAB>fasta_path`, one row per
-haplotype/reference genome, e.g.:
+`samples_manifest.tsv` 형식 (`01_prepare_input_fasta.sh` 상단 주석
+참고): `sample_id<TAB>hap_index<TAB>fasta_path`, haplotype/레퍼런스
+게놈마다 한 줄씩. 예:
 
 ```
 sample01	1	assemblies/sample01_hap1.fa
@@ -133,35 +133,38 @@ sample01	2	assemblies/sample01_hap2.fa
 grch38	0	ref/grch38.fa
 ```
 
-## Notes / caveats
+## 참고 사항 / 주의할 점
 
-- **Cactus is not conda-installed here** — see `environment.yml` for
-  why and where to get it.
-- **PanSN naming matters for diploid genotyping**: `01_prepare_input_fasta.sh`
-  renames headers to `sample#hap#contig`. Pairing hap 1/2 of the same
-  individual under one `sample_id` is what lets `vg deconstruct` (03)
-  and `cactus-pangenome` (02a) emit one diploid genotype column per
-  individual automatically — this has not been empirically confirmed on
-  this pipeline yet (see VERIFICATION_TODO.md). If your panel VCF ends
-  up with one column per haplotype instead of per individual,
-  `06_prepare_pangenie_panel.sh` will need an added haplotype-merge step
-  before PanGenie genotyping.
-- **`vg pack` GAM input flag**: `05_vg_giraffe_call.sh` uses `-a` for
-  GAM input (per prior hands-on experience with this exact gotcha, not
-  the more obviously-named `-g`). Re-verify against `vg pack --help` on
-  your installed vg version.
-- **Output filenames are version-dependent and unverified** for
-  `cactus-pangenome` (02a) and `pggb`'s final smoothed GFA (02b) — both
-  scripts log what's expected but haven't been run end-to-end here.
-- **Resource requirements**: prior benchmarking (2 haplotypes, CHM13 +
-  GRCh38) saw Minigraph-Cactus finish in ~7.5h at ~108 GB peak memory
-  (32 threads) vs. PGGB's ~21h at lower peak memory but far worse
-  scaling with more haplotypes/threads. Expect this to scale up
-  significantly with real per-sample diploid assemblies and more
-  samples — size your job accordingly before submitting to the cluster.
-- **This repo does not cover per-sample long-read assembly** — that's
-  [`genome_assembly_ONT(hi-c)`](../genome_assembly_ONT(hi-c)), whose
-  `_primary.fa`/`_alternate.fa` or `_hap1.fa`/`_hap2.fa` outputs are the
-  expected input to `01_prepare_input_fasta.sh` here.
+- **Cactus는 여기서 conda로 설치하지 않습니다** — 이유와 설치 방법은
+  `environment.yml` 참고.
+- **PanSN 네이밍이 diploid genotyping에 중요합니다**:
+  `01_prepare_input_fasta.sh`가 헤더를 `sample#hap#contig` 형식으로
+  바꿉니다. 같은 개체의 hap1/hap2를 같은 `sample_id` 아래로 묶어야
+  `vg deconstruct`(03)와 `cactus-pangenome`(02a)가 개체당 하나의
+  diploid genotype 컬럼을 자동으로 만들어줍니다 — 이 파이프라인에서
+  실제로 확인된 사항은 아직 아닙니다 (VERIFICATION_TODO.md 참고).
+  만약 패널 VCF에 개체별이 아니라 haplotype별로 컬럼이 따로 나온다면,
+  PanGenie genotyping 전에 `06_prepare_pangenie_panel.sh`에 haplotype
+  병합 단계를 추가해야 합니다.
+- **`vg pack`의 GAM 입력 플래그**: `05_vg_giraffe_call.sh`는 GAM 입력에
+  `-g`가 아니라 `-a`를 사용합니다 (이전에 직접 겪었던 사항을 반영한
+  것으로, 이름만 보면 `-g`가 더 자연스러워 보이지만 실제로는 `-a`가
+  맞았습니다). 설치된 vg 버전의 `vg pack --help`로 다시 확인하세요.
+- **출력 파일명은 버전에 따라 달라질 수 있고 아직 검증되지 않았습니다**:
+  `cactus-pangenome`(02a)과 `pggb`의 최종 smoothed GFA(02b) 모두
+  예상 파일명을 로그로 남기지만, 실제 end-to-end 실행으로 확인된 적은
+  없습니다.
+- **리소스 요구량**: 이전 벤치마크(haplotype 2개, CHM13 + GRCh38
+  기준) 상 Minigraph-Cactus는 약 7.5시간, peak 메모리 약 108GB(32
+  threads)로 끝났고, PGGB는 peak 메모리는 더 낮지만 약 21시간이
+  걸렸고 haplotype/thread가 늘어날수록 확장성이 훨씬 나빴습니다.
+  실제 개인별 diploid assembly와 더 많은 샘플로 돌리면 이보다 훨씬
+  커질 수 있으니, 클러스터에 job을 올리기 전에 리소스를 여유 있게
+  잡으세요.
+- **이 저장소는 개인별 long-read assembly 단계를 다루지 않습니다** —
+  그건 [`genome_assembly_ONT(hi-c)`](../genome_assembly_ONT(hi-c))의
+  역할이며, 그 결과물인 `_primary.fa`/`_alternate.fa` 또는
+  `_hap1.fa`/`_hap2.fa`가 여기 `01_prepare_input_fasta.sh`의 입력으로
+  들어갑니다.
 
 Author: Jaehyung Park (JP)
