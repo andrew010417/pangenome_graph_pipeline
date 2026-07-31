@@ -1,0 +1,43 @@
+# Conda/mamba environment for the pangenome graph construction /
+# genotyping pipeline (Minigraph-Cactus + PGGB graph building, vg +
+# PanGenie variant calling).
+#
+# Usage:
+#   mamba env create -f environment.yml   # (or: conda env create -f environment.yml)
+#   conda activate pangenome-graph
+#
+# IMPORTANT — Minigraph-Cactus is NOT in this environment:
+# Cactus is not reliably conda-installable; the upstream project ships
+# versioned release tarballs / a Docker/Singularity image instead (see
+# https://github.com/ComparativeGenomicsToolkit/cactus/releases). Install
+# it separately per the official instructions for the version you pick,
+# and put `cactus-pangenome` on PATH (or activate its own venv) before
+# running 02a_build_graph_minigraph_cactus.sh.
+#
+# Version-pinning note:
+# These pins are carried over from a prior project's own tested run
+# notes (pggb 0.6.0, vg 1.71.0, PanGenie 4.2.1, cactus 9.3.0 -- the
+# latter installed outside conda, see above) — they are NOT verified
+# against what's actually resolvable/available on bioconda today or
+# what Choi Lab's cluster already has installed. Before relying on this
+# for production runs:
+#   - run `mamba search pggb / vg / pangenie / bcftools / samtools /
+#     seqkit` and confirm each pin actually resolves (bioconda channel
+#     lag and version renumbering are common)
+#   - PanGenie in particular: if `pangenie=4.2.1` doesn't resolve, check
+#     the project's actual release history before assuming it's a typo
+#     for a lower version
+#   - adjust to match whatever the lab already has validated if that
+#     differs (see VERIFICATION_TODO.md)
+name: pangenome-graph
+channels:
+  - bioconda
+  - conda-forge
+dependencies:
+  - pggb=0.6.0
+  - vg=1.71.0
+  - pangenie=4.2.1
+  - bcftools=1.20
+  - samtools=1.20
+  - htslib=1.20
+  - seqkit=2.8.2
