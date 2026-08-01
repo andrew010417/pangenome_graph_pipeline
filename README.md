@@ -45,7 +45,7 @@ single-cell 수준 long-read 시퀀싱, 추가 라이브러리 준비 없이 특
 
 이 저장소는 그 흐름의 후반부, 즉 **판게놈 그래프 구축과 genotyping**
 단계를 구현합니다. 개인별 long-read assembly 파이프라인인
-[`genome_assembly_ONT(hi-c)`](../genome_assembly_ONT(hi-c))가 사람 한
+`genome_assembly_ONT(hi-c)` (별도 저장소)가 사람 한
 명 한 명의 assembly(유전체 지도)를 만들면, 이 저장소는 그
 assembly들 + 레퍼런스 게놈을 Minigraph-Cactus/PGGB로 합쳐서 판게놈
 그래프를 만들고, vg와 PanGenie로 새로운 short-read 샘플(예: 희귀질환
@@ -146,8 +146,10 @@ long read를 레퍼런스 하나에 그냥 매핑하는 것만으로도 read 길
 
 ## 요구 사항
 
-- `cactus` (`cactus-pangenome` 포함, 9.x 이상) — conda로 설치 **불가**,
-  설치 방법은 `environment.yml` 참고
+- `cactus` (`cactus-pangenome` 서브커맨드가 있는 버전) — conda로 설치
+  **불가**, 설치 방법은 `environment.yml` 참고. 정확한 버전 요구사항은
+  미확인 상태이니 설치 후 `cactus-pangenome --help`로 지원 여부를
+  먼저 확인하세요.
 - `pggb`, `vg`, `PanGenie`, `bcftools`, `samtools`, `htslib` (tabix/bgzip), `seqkit`
 
 Cactus를 제외한 나머지 도구들은 버전을 고정한 conda 환경을
@@ -177,7 +179,7 @@ scripts/
 ├── 03_pggb_gfa_to_vcf.sh               vg convert + vg deconstruct  -> VCF 패널 (PGGB 경로 전용)
 ├── 04_vg_autoindex_giraffe.sh          vg autoindex --workflow giraffe -> GBZ/dist/min (PGGB 경로, 또는 MC 인덱스 재생성용)
 ├── 05_vg_giraffe_call.sh               vg giraffe -> vg pack -> vg call   (샘플별, 그래프 직접 매핑)
-└── 06_prepare_pangenie_panel.sh        bcftools norm -m -any  -> biallelic 패널 VCF
+├── 06_prepare_pangenie_panel.sh        bcftools norm -m -any  -> biallelic 패널 VCF
 └── 07_pangenie_genotype.sh             PanGenie k-mer counting + HMM genotyping  (샘플별, 패널 기반)
 ```
 
@@ -287,7 +289,7 @@ grch38	0	ref/grch38.fa
   이보다 훨씬 커질 수 있으니, 클러스터에 job을 올리기 전에 리소스를
   여유 있게 잡으세요.
 - **이 저장소는 개인별 long-read assembly 단계를 다루지 않습니다** —
-  그건 [`genome_assembly_ONT(hi-c)`](../genome_assembly_ONT(hi-c))의
+  그건 `genome_assembly_ONT(hi-c)`(별도 저장소)의
   역할이며, 그 결과물인 `_primary.fa`/`_alternate.fa` 또는
   `_hap1.fa`/`_hap2.fa`가 여기 `01_prepare_input_fasta.sh`의 입력으로
   들어갑니다.
