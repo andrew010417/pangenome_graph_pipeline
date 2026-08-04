@@ -47,3 +47,34 @@
 - [ ] `set -euo pipefail` 적용 후 각 스크립트의 파이프(`| tee`) 실패
       시 실제로 스크립트가 멈추는지 확인 (의도적 실패 케이스로 테스트)
       참고: 모든 scripts/*.sh
+
+## 08/09 (그래프 품질 검사 / augmentation) 추가 검증 항목
+
+- [ ] `odgi build`가 cactus-pangenome/pggb가 출력한 GFA를 별도 플래그
+      없이 바로 읽는지 확인 (`odgi build --help`) — blunt/비-blunt
+      그래프 여부에 따라 정규화 플래그가 필요할 수 있음
+      참고: scripts/08_graph_qc.sh
+- [ ] `panacus histgrowth`가 GFA를 직접 입력받는지, 아니면 다른 전처리
+      (예: `panacus prep` 유사 서브커맨드)가 먼저 필요한지 확인
+      (`panacus histgrowth --help`)
+      참고: scripts/08_graph_qc.sh
+- [ ] `panacus-visualize` 별도 바이너리/스크립트가 실제로 설치되는지,
+      아니면 panacus 자체에 통합된 서브커맨드인지 확인
+      참고: scripts/08_graph_qc.sh, environment.yml
+- [ ] `minigraph -cxggs` 플래그 조합이 "기존 그래프 + 신규 haplotype
+      -> augmented GFA" augmentation 용도로 맞는지 확인
+      (`minigraph --help`, `man minigraph`) — construct 전용 프리셋과
+      혼동하지 않도록 주의
+      참고: scripts/09_augment_graph.sh
+- [ ] `bcftools consensus`가 vg call(05)의 unphased VCF를 입력받았을 때
+      기대한 대로 동작하는지 (het 사이트에서 어느 ALT를 선택하는지)
+      확인 — phased haplotype 두 개가 필요하면 `-H 1`/`-H 2`로 나눠
+      돌려야 함
+      참고: scripts/09_augment_graph.sh
+- [ ] augmentation 후 재생성한 패널 VCF에서 `bcftools query -l`로
+      샘플 컬럼이 예상대로 나오는지 (01의 diploid genotype 컬럼 검증
+      항목과 동일한 문제가 augmented 그래프에서도 재발할 수 있음)
+      참고: scripts/09_augment_graph.sh
+- [ ] `environment.yml`의 odgi/panacus/minigraph 버전 핀이 bioconda에서
+      실제로 resolve 되는지 확인
+      참고: environment.yml

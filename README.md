@@ -170,7 +170,9 @@ scripts/
 ├── 04_vg_autoindex_giraffe.sh          vg autoindex --workflow giraffe -> GBZ/dist/min (PGGB 경로, 또는 MC 인덱스 재생성용)
 ├── 05_vg_giraffe_call.sh               vg giraffe -> vg pack -> vg call   (샘플별, 그래프 직접 매핑)
 ├── 06_prepare_pangenie_panel.sh        bcftools norm -m -any  -> biallelic 패널 VCF
-└── 07_pangenie_genotype.sh             PanGenie k-mer counting + HMM genotyping  (샘플별, 패널 기반)
+├── 07_pangenie_genotype.sh             PanGenie k-mer counting + HMM genotyping  (샘플별, 패널 기반)
+├── 08_graph_qc.sh                      odgi stats + panacus histgrowth -> 그래프 품질 검사 (02a/02b 직후, genotyping 전에)
+└── 09_augment_graph.sh                 vg 신규 변이 + minigraph -> 그래프 확장 (05 이후, 샘플별)
 ```
 
 ### 각 스크립트가 정확히 무엇을 입출력하는지
@@ -185,6 +187,8 @@ scripts/
 | `05_vg_giraffe_call.sh` | 그래프 인덱스 + 샘플 FASTQ(R1/R2) | `<sample>.vcf.gz` | read를 그래프에 매핑해서 그 샘플의 변이를 새로 발굴 |
 | `06_prepare_pangenie_panel.sh` | VCF 패널 + 레퍼런스 FASTA | `<name>.biallelic.vcf.gz` | multiallelic 변이를 분리해서 PanGenie가 읽을 수 있는 형태로 정리 |
 | `07_pangenie_genotype.sh` | biallelic 패널 VCF + 샘플 FASTQ | `<sample>_genotyping.vcf(.gz)` | 패널에 있는 변이들을 그 샘플이 갖고 있는지 k-mer 기반으로 판정 |
+| `08_graph_qc.sh` | 그래프 GFA | `odgi_stats_summary.yaml`, `panacus_growth.tsv` | 그래프 구조(노드/엣지/component)와 pangenome growth curve로 그래프가 제대로 만들어졌는지 확인 |
+| `09_augment_graph.sh` | 기존 그래프 GFA + 패널 VCF + 샘플 VCF(05) + 레퍼런스 | `<sample>.augmented.gfa` | 그 샘플에서만 발견된 신규 변이를 그래프에 병합해 그래프를 확장 |
 
 **어떤 그래프 구축 도구를 쓸지**: 기본은 Minigraph-Cactus(`02a`)를
 사용하세요 — 더 빠르고, 메모리도 적게 쓰고, 샘플 수가 많아도 잘
@@ -207,6 +211,8 @@ scripts/01_prepare_input_fasta.sh -o prep -m samples_manifest.tsv -t 8
 scripts/02a_build_graph_minigraph_cactus.sh \
     -o graph_mc -j /scratch/jobstore_mc \
     -s prep/mc_seqfile.tsv -r grch38 -t 32 -n pangenome
+
+scripts/08_graph_qc.sh -o graph_mc/qc -g graph_mc/pangenome.gfa.gz -t 8
 
 scripts/05_vg_giraffe_call.sh \
     -o calls_vg/sample01 -x graph_mc/pangenome -s sample01 \
@@ -236,6 +242,47 @@ scripts/05_vg_giraffe_call.sh \
     -o calls_vg_pggb/sample01 -x graph_pggb/pangenome_pggb -s sample01 \
     -1 sample01_R1.fastq.gz -2 sample01_R2.fastq.gz -t 16
 ```
+
+### 그래프 품질 검사 (`08`, 권장)
+
+그래프 구축(`02a`/`02b`) 직후, genotyping(`04`~`07`)으로 넘어가기 전에
+한 번 돌려서 그래프가 이상하게 만들어지지 않았는지 확인하세요:
+
+```bash
+scripts/08_graph_qc.sh -o graph_mc/qc -g graph_mc/pangenome.gfa.gz -t 8
+```
+
+`odgi_stats_summary.yaml`(노드/엣지/component 등 구조 통계)와
+`panacus_growth.tsv`(샘플 수를 늘릴수록 새로운 서열이 얼마나
+추가되는지 보여주는 growth curve)를 출력합니다. 특히 PGGB는 파라미터에
+따라 그래프 구조가 크게 달라질 수 있으므로(`README`
+"참고 사항" 절 및 논문 "Robustness" 참고), 이 단계를 건너뛰지
+마세요.
+
+### 그래프 확장 / Augmentation (`09`, 선택)
+
+`05_vg_giraffe_call.sh`로 어떤 샘플의 변이를 발굴했는데, 그 변이가
+그래프의 기존 패널에는 없던 것이라면 `09_augment_graph.sh`로 그래프에
+다시 반영할 수 있습니다:
+
+```bash
+scripts/09_augment_graph.sh \
+    -o graph_mc/augmented \
+    -g graph_mc/pangenome.gfa.gz \
+    -p graph_mc/pangenome.vcf.gz \
+    -v calls_vg/sample01/sample01.vcf.gz \
+    -r ref/grch38.fa \
+    -s sample01 -t 16
+```
+
+**왜 필요한지**: PanGenie(`06`+`07`)는 genome inference 방식이라 그래프에
+아직 없는 변이는 원리상 절대 찾지 못합니다. 환자가 새로 추가될
+때마다 이 단계를 거치지 않으면 그래프가 처음 만든 시점에 계속
+고정되어, 시간이 지날수록 최신 변이 정보를 반영하지 못합니다.
+augmentation 후에는 `04_vg_autoindex_giraffe.sh`로 인덱스를 다시
+만들고, 새 augmented 그래프에서 `vg deconstruct`(03과 동일한 방식)로
+패널 VCF를 다시 뽑아 `06_prepare_pangenie_panel.sh`를 재실행해야
+다음 환자부터 이 신규 변이가 PanGenie 패널에도 반영됩니다.
 
 `samples_manifest.tsv` 형식 (`01_prepare_input_fasta.sh` 상단 주석
 참고): `sample_id<TAB>hap_index<TAB>fasta_path`, haplotype/레퍼런스

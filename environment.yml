@@ -29,6 +29,13 @@
 #     for a lower version
 #   - adjust to match whatever the lab already has validated if that
 #     differs (see VERIFICATION_TODO.md)
+#
+# odgi/panacus/minigraph added for 08_graph_qc.sh (graph quality checks)
+# and 09_augment_graph.sh (graph augmentation) -- version pins for these
+# three are NOT based on prior tested-run notes (unlike the block above)
+# and have not been confirmed to resolve on bioconda; treat them as a
+# starting guess and re-check with `mamba search odgi / panacus /
+# minigraph` before relying on them.
 name: pangenome-graph
 channels:
   - bioconda
@@ -41,3 +48,6 @@ dependencies:
   - samtools=1.20
   - htslib=1.20
   - seqkit=2.8.2
+  - odgi=0.9.0
+  - panacus=0.3.0
+  - minigraph=0.21
